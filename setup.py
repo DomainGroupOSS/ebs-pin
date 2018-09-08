@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='ebs-pin',
-    version='0.3.3',
+    version='2.0.0',
     scripts=['ebs-pin'],
     packages=['ebspin'],
     url='https://github.com/DomainGroupOSS/ebs-pin.git',
