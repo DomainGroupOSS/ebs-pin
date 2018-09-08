@@ -1,46 +1,79 @@
-#!/usr/bin/env python2.7
-from ebspin import base, configuration
-import argparse, logging, sys
+#!/usr/bin/env python
+"""EBS PIN v2"""
 
-logging.basicConfig(level=logging.INFO)
+import click
+import click_log
+import logging
+log = logging.getLogger(__name__)
+click_log.basic_config(log)
+import sys, os
+import yaml
+import uuid
+import requests
+from ebspin.ebs_manager import EBSManager, EBS_PIN_ID, DEVICE, MOUNT_DIR, VIRTUAL_DEVICE
+import yaml
+
+class EBSPINConfigException(Exception):
+    pass
+
+def get_manager(config_file='/etc/ebs-pin.yaml'):
+    """
+    Config format:
+       EBS-PIN-ID: uniq-id
+       device: /dev/xvdf
+       virtual_device: /dev/xvdf1 # quite different per OS/Instance type
+       mount_dir: /data
+       version: commenting...
+       init_size: 20 #GB
+    """
+    if os.path.isfile(config_file):
+        with open(config_file) as f:
+            config = yaml.load(f)
+        for key in [EBS_PIN_ID, DEVICE, MOUNT_DIR, VIRTUAL_DEVICE]:
+            if not config.get(key):
+                raise EBSPINConfigException("%s Must not be empty!" % key)
+    else:
+        raise EBSPINConfigException(
+            "Could not find config file %s", config_file)
+    facts = yaml.load(requests.get(
+        'http://169.254.169.254/latest/dynamic/instance-identity/document', timeout=2).text)
+
+    manager = EBSManager(logger=log,
+                         id=config.get(EBS_PIN_ID),
+                         device=config.get(DEVICE),
+                         directory=config.get(MOUNT_DIR),
+                         virtual_device=config.get(VIRTUAL_DEVICE),
+                         init_size=config.get('init_size',2),
+                         instance_id=facts.get('instanceId'),
+                         region=facts.get('region'),
+                         availability_zone=facts.get('availabilityZone'),
+                         instance_type=facts.get('instanceType')
+                         )
+    return manager
+
+
+@click.group()
+def cli():
+    """EBS PIN v2"""
+    pass
+
+
+@cli.command("attach")
+@click_log.simple_verbosity_option(log)
+def attach():
+    """Initiallize or attach volume by configuration
+    """
+    manager=get_manager()
+    manager.attach_volume()
+
+@cli.command("snapshot")
+@click_log.simple_verbosity_option(log)
+@click.option('--no-wait', is_flag=True)
+@click.option('--no-cleanup', is_flag=True)
+def snapshot(no_wait, no_cleanup):
+    """Take a snapshot NOW for the currently mounted volume"""
+    manager=get_manager()
+    manager.create_snapshot(wait=not no_wait, cleanup=not no_cleanup)
 
 if __name__ == '__main__':
-
-    parser = argparse.ArgumentParser()
-
-    attach = argparse.ArgumentParser(add_help=False)
-    attach.add_argument('-u', '--uuid', required=True, help='The UUID tag')
-    attach.add_argument('-d', '--device', default='/dev/xvdf', help='The device to use, default=/dev/xvdf')
-    attach.add_argument('-s', '--size', default=10, type=int, help='The volume size in GB, default=10')
-    attach.add_argument('-t', '--type', default='gp2', help='The volume type, standard, gp2 etc, default=gp2')
-    attach.add_argument('-a', '--tags', nargs='+', default=None, help='List of AWS tags to add, e.g. Key1=Value1 Key2=Value2')
-
-    snapshot = argparse.ArgumentParser(add_help=False)
-    snapshot.add_argument('-u', '--uuid', required=True, help='The UUID tag')
-    snapshot.add_argument('-a', '--tags', nargs='+', default=None, help='List of additional AWS tags to add, e.g. Key1=Value1 Key2=Value2')
-
-    sp = parser.add_subparsers()
-    sp_attach = sp.add_parser('attach', help='Attach or create new volume', parents=[attach])
-    sp_attach.set_defaults(which='attach')
-    sp_snapshot = sp.add_parser('snapshot', help='Snapshot existing volume', parents=[snapshot])
-    sp_snapshot.set_defaults(which='snapshot')
-
-    args = parser.parse_args()
-
-    # convert tags Key=Value to dictionary
-    tags = {}
-    if args.tags:
-        for tag in args.tags:
-            key, value = tag.split('=')
-            tags[key] = value
-    args.tags = tags
-
-    c = configuration.Configuration()
-    metadata = c.metadata()
-    b = base.Base(args, metadata)
-
-    if args.which == 'attach':
-        b.attach()
-
-    if args.which == 'snapshot':
-        b.snapshot()
+    cli()

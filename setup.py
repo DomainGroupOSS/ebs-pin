@@ -1,4 +1,3 @@
-from pip.req import parse_requirements
 from setuptools import setup
 
 setup(
@@ -6,21 +5,21 @@ setup(
     version='0.3.3',
     scripts=['ebs-pin'],
     packages=['ebspin'],
-    url='https://github.com/discobean/ebs-pin',
+    url='https://github.com/DomainGroupOSS/ebs-pin.git',
     description='Pin EBS volumes in a multi-az EC2 instance',
     install_requires=[
-        'appdirs>=1.4.0',
-        'boto3>=1.4.4',
-        'botocore>=1.5.10',
-        'docutils>=0.13.1',
-        'futures>=3.0.5',
-        'jmespath>=0.9.1',
-        'packaging>=16.8',
-        'pyparsing>=2.1.10',
-        'python-dateutil>=2.6.0',
-        'requests>=2.13.0',
-        's3transfer>=0.1.10',
-        'six>=1.10.0'],
+        'futures<4.0', 'requests< 3.0.0',
+        'six<2.0',
+        'click < 7.0',
+        'click_log < 1.0',
+        'sh < 1.13',
+        'backoff < 2.0',
+        'arrow < 2.0',
+        'pyyaml',
+        'python-crontab < 3.0',
+        'boto3 < 2.0',
+        'pip',
+        'backoff < 2.0',
+    ],
     keywords='ebs ebspin ebs-pin'
 )
-
