@@ -25,10 +25,10 @@ Also has a method to create snapshots you can place in cron, and is able to tag 
 The config file is '/etc/ebs-pin.yaml'
 ```yaml
 EBS-PIN-ID: dynamic-ebs-38555a2a-adb5-11e8-a6dc-02e2829ec81a
-device: /dev/xvdf # Must be set correctly by the context. Normally it is quite different from instance type/operations sytem
-mount_dir: /data 
+aws_device: /dev/xvdf # Must be set correctly by the context. Normally it is quite different from instance type/operations sytem
+mount_dir: /data
 init_size: 1 # in Gigs
-virtual_device: /dev/xvdf
+os_device: /dev/xvdf
 ```
 
 ### Commands

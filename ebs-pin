@@ -10,7 +10,7 @@ import sys, os
 import yaml
 import uuid
 import requests
-from ebspin.ebs_manager import EBSManager, EBS_PIN_ID, DEVICE, MOUNT_DIR, VIRTUAL_DEVICE
+from ebspin.ebs_manager import EBSManager, EBS_PIN_ID, AWS_DEVICE, MOUNT_DIR, OS_DEVICE
 import yaml
 
 class EBSPINConfigException(Exception):
@@ -20,8 +20,8 @@ def get_manager(config_file='/etc/ebs-pin.yaml'):
     """
     Config format:
        EBS-PIN-ID: uniq-id
-       device: /dev/xvdf
-       virtual_device: /dev/xvdf1 # quite different per OS/Instance type
+       aws_device: /dev/xvdf
+       os_device: /dev/xvdf1 # quite different per OS/Instance type
        mount_dir: /data
        version: commenting...
        init_size: 20 #GB
@@ -29,7 +29,7 @@ def get_manager(config_file='/etc/ebs-pin.yaml'):
     if os.path.isfile(config_file):
         with open(config_file) as f:
             config = yaml.load(f)
-        for key in [EBS_PIN_ID, DEVICE, MOUNT_DIR, VIRTUAL_DEVICE]:
+        for key in [EBS_PIN_ID, AWS_DEVICE, MOUNT_DIR, OS_DEVICE]:
             if not config.get(key):
                 raise EBSPINConfigException("%s Must not be empty!" % key)
     else:
@@ -40,9 +40,9 @@ def get_manager(config_file='/etc/ebs-pin.yaml'):
 
     manager = EBSManager(logger=log,
                          id=config.get(EBS_PIN_ID),
-                         device=config.get(DEVICE),
+                         aws_device=config.get(AWS_DEVICE),
                          directory=config.get(MOUNT_DIR),
-                         virtual_device=config.get(VIRTUAL_DEVICE),
+                         os_device=config.get(OS_DEVICE),
                          init_size=config.get('init_size',20),
                          instance_id=facts.get('instanceId'),
                          region=facts.get('region'),

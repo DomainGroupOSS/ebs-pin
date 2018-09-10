@@ -10,23 +10,26 @@ import sh
 import os
 
 EBS_PIN_ID = 'EBS-PIN-ID'
-DEVICE = 'device'
+AWS_DEVICE = 'aws_device'
 MOUNT_DIR = 'mount_dir'
-VIRTUAL_DEVICE = 'virtual_device'
+OS_DEVICE = 'os_device'
+
 
 def backoff_hdlr(details):
     print("Boto error happens here rarely due to network issues or permission issues, but logical errors. "
-    "For example, try to delete an old volume with the same {tag}. When you see this error happening and "
-    "this script is trying hard to retry, please double check if no human error has occured. ".format(tag=EBS_PIN_ID))
+          "For example, try to delete an old volume with the same {tag}. When you see this error happening and "
+          "this script is trying hard to retry, please double check if no human error has occured. ".format(tag=EBS_PIN_ID))
+
+
 class EBSManager(object):
-    def __init__(self, logger, id, device, virtual_device, directory, region,
+    def __init__(self, logger, id, aws_device, os_device, directory, region,
                  availability_zone, instance_id, instance_type,
                  volume_type='gp2',
                  init_size=20, create_wait_timeout=900, mark_file='.ebs-pin.yaml'):
         self.id = id
-        self.device = device
-        self.virtual_device = virtual_device
-        self. directory = directory
+        self.aws_device = aws_device
+        self.os_device = os_device
+        self.directory = directory
         self.availability_zone = availability_zone
         self.region = region
         self.instance_id = instance_id
@@ -62,7 +65,7 @@ class EBSManager(object):
             raise Exception("Failed to attach volume.")
         if new_create:
             self.logger.info("Initialize %s with format ext4",
-                             self.virtual_device)
+                             self.os_device)
             sh.bash('-c', '''(
 echo o # Create a new empty DOS partition table
 echo n # Add a new partition
@@ -71,16 +74,16 @@ echo 1 # Partition number
 echo   # First sector (Accept default: 1)
 echo   # Last sector (Accept default: varies)
 echo w # Write changes
-) | sudo fdisk {virtual_device}'''.format(virtual_device=self.virtual_device))
+) | sudo fdisk {os_device}'''.format(os_device=self.os_device))
             sh.bash(
-                '-c', 'sudo mkfs.ext4 {virtual_device}'.format(virtual_device=self.virtual_device))
+                '-c', 'sudo mkfs.ext4 {os_device}'.format(os_device=self.os_device))
         self.logger.info("mounting %s to %s",
-                         self.virtual_device, self.directory)
+                         self.os_device, self.directory)
         sh.bash('-c', 'if [[ ! -d {dir} ]]; then sudo mkdir {dir}; fi'.format(
             dir=self.directory
         ))
         sh.bash('-c', 'sudo mount {virtual_dvice} {dir}'.format(
-            virtual_dvice=self.virtual_device,
+            virtual_dvice=self.os_device,
             dir=self.directory
         ))
         sh.bash('-c', 'sudo chmod 777 {dir}'.format(
@@ -306,7 +309,7 @@ echo w # Write changes
                 self.client.attach_volume(
                     VolumeId=volume['VolumeId'],
                     InstanceId=self.instance_id,
-                    Device=self.device
+                    Device=self.aws_device
                 )
                 self._wait_volume(volume, 'in-use')
             return volume
@@ -326,7 +329,7 @@ echo w # Write changes
         try:
             tags = [
                 {'Key': 'Name', 'Value': '%s:%s:%s' % (
-                    self.instance_id, self.device, self.directory)},
+                    self.instance_id, self.aws_device, self.directory)},
                 {'Key': EBS_PIN_ID, 'Value': self.id},
             ] + list(extra_tags)
 
@@ -342,7 +345,7 @@ echo w # Write changes
         try:
             tags = [
                 {'Key': 'Name', 'Value': '%s:%s:%s' % (
-                    self.instance_id, self.device, self.directory)},
+                    self.instance_id, self.aws_device, self.directory)},
                 {'Key': EBS_PIN_ID, 'Value': self.id},
             ] + list(extra_tags)
             return self.client.create_tags(
