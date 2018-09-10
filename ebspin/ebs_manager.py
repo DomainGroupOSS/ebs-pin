@@ -142,7 +142,10 @@ echo w # Write changes
                 "If there are, clean up unused older volumes with %s => %s", EBS_PIN_ID, self.id)
             for v in self._find_should_deleted_volumes(volumes):
                 self.logger.info("Deleting %s", v.get('VolumeId'))
-                self.client.delete_volume(VolumeId=v['VolumeId'])
+                try:
+                    self.client.delete_volume(VolumeId=v['VolumeId'])
+                except Exception as e:
+                    self.logger.warn("Exception %s, ignore and continue", e)
         return result
 
     def _get_latest_snapshot(self, cleanup=True):
@@ -172,7 +175,10 @@ echo w # Write changes
             for snapshot in self._find_should_deleted_snapshots(snapshots):
                 self.logger.info("Deleting snapshot %s",
                                  snapshot['SnapshotId'])
-                self.client.delete_snapshot(SnapshotId=snapshot['SnapshotId'])
+                try:
+                    self.client.delete_snapshot(SnapshotId=snapshot['SnapshotId'])
+                except Exception as e:
+                    self.logger.warn("Exception %s, ignore and continue.", e)
         return result
 
     def _create_new_volume(self):
