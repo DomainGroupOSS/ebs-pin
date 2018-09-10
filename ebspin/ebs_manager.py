@@ -203,7 +203,7 @@ echo w # Write changes
     def _get_attached_volume(self):
         if not os.path.isfile(os.path.join(self.directory, self.mark_file)):
             self.logger.info(
-                "This instance does not have EBS Pinned value mounted")
+                "This instance does not have EBS Pinned volume mounted")
             return None
         found_volume = None
         for volume in self.resource.Instance(self.instance_id).volumes.all():
