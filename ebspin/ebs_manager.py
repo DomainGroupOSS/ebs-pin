@@ -56,6 +56,7 @@ class EBSManager(object):
         # check there is already a volume exists
         self.logger.info("Searching for volume %s => %s", EBS_PIN_ID, self.id)
         volume = self._get_latest_volume_available()
+        self.logger.debug("Found volume: %s", volume)
         new_create = False
         if volume is None:
             volume = self._create_new_volume()
