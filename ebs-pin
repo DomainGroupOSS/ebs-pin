@@ -6,7 +6,8 @@ import click_log
 import logging
 log = logging.getLogger(__name__)
 click_log.basic_config(log)
-import sys, os
+import sys
+import os
 import yaml
 import uuid
 import requests
@@ -15,6 +16,7 @@ import yaml
 
 class EBSPINConfigException(Exception):
     pass
+
 
 def get_manager(config_file='/etc/ebs-pin.yaml'):
     """
@@ -43,7 +45,7 @@ def get_manager(config_file='/etc/ebs-pin.yaml'):
                          aws_device=config.get(AWS_DEVICE),
                          directory=config.get(MOUNT_DIR),
                          os_device=config.get(OS_DEVICE),
-                         init_size=config.get('init_size',20),
+                         init_size=config.get('init_size', 20),
                          instance_id=facts.get('instanceId'),
                          region=facts.get('region'),
                          availability_zone=facts.get('availabilityZone'),
@@ -60,20 +62,24 @@ def cli():
 
 @cli.command("attach")
 @click_log.simple_verbosity_option(log)
-def attach():
+@click.option('--config', default='/etc/ebs-pin.yaml')
+def attach(config):
     """Initiallize or attach volume by configuration
     """
-    manager=get_manager()
+    manager = get_manager(config_file=config)
     manager.attach_volume()
+
 
 @cli.command("snapshot")
 @click_log.simple_verbosity_option(log)
 @click.option('--no-wait', is_flag=True)
 @click.option('--no-cleanup', is_flag=True)
-def snapshot(no_wait, no_cleanup):
-    """Take a snapshot NOW for the currently mounted volume"""
-    manager=get_manager()
+@click.option('--config', default='/etc/ebs-pin.yaml')
+def snapshot(no_wait, no_cleanup, config):
+    """Take a snapshot NOW for the currently mounted volume. The cleanup respects Expires tag (can be a times or Never)."""
+    manager = get_manager(config_file=config)
     manager.create_snapshot(wait=not no_wait, cleanup=not no_cleanup)
+
 
 if __name__ == '__main__':
     cli()

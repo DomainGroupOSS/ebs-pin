@@ -125,7 +125,7 @@ echo w # Write changes
             self.logger.debug("No such volume")
             return None
         volumes = sorted(
-            volumes, key=lambda ss: ss['CreateTime'], reverse=True)  # todo: sort by attach time tag first.
+            volumes, key=lambda ss: ss['CreateTime'], reverse=True)
         volume = volumes[0]
         result = None
         if volume['State'] == 'available' and volume['AvailabilityZone'] == self.availability_zone \
@@ -142,11 +142,12 @@ echo w # Write changes
             self.logger.info(
                 "If there are, clean up unused older volumes with %s => %s", EBS_PIN_ID, self.id)
             for v in self._find_should_deleted_volumes(volumes):
+                continue
                 self.logger.info("Deleting %s", v.get('VolumeId'))
                 try:
                     self.client.delete_volume(VolumeId=v['VolumeId'])
                 except Exception as e:
-                    self.logger.warn("Exception %s, ignore and continue", e)
+                    self.logger.warn("Exception: '%s', ignore and continue", e)
         return result
 
     def _get_latest_snapshot(self, cleanup=True):
@@ -177,9 +178,11 @@ echo w # Write changes
                 self.logger.info("Deleting snapshot %s",
                                  snapshot['SnapshotId'])
                 try:
-                    self.client.delete_snapshot(SnapshotId=snapshot['SnapshotId'])
+                    self.client.delete_snapshot(
+                        SnapshotId=snapshot['SnapshotId'])
                 except Exception as e:
-                    self.logger.warn("Exception %s, ignore and continue.", e)
+                    self.logger.warn(
+                        "Exception: '%s', ignore and continue.", e)
         return result
 
     def _create_new_volume(self):
@@ -219,7 +222,8 @@ echo w # Write changes
                 if tag.get('Key') == EBS_PIN_ID and tag.get('Value') == self.id:
                     found_volume = {
                         'VolumeId': volume.volume_id,
-                        'CreateTime': volume.create_time
+                        'CreateTime': volume.create_time,
+                        'Tags': volume.tags,
                     }
                     self._tag_volume(found_volume['VolumeId'])
                     return found_volume
@@ -325,12 +329,40 @@ echo w # Write changes
             return None
 
     def _find_should_deleted_snapshots(self, snapshots):
-        # todo: apply cleanup strategy here. default, keep last 3
-        return snapshots[3:]
+        # A simple solution: only keep 3. But respect the Expires tag
+        self.logger.debug('Finding out snapshots that will be deleted.'
+                          ' Will keep three latest for later use.')
+        return [s for s in snapshots if self._can_be_cleaned(s, 'snapshot')][3:]
 
     def _find_should_deleted_volumes(self, volumes):
-        # todo: apply cleanup strategy here. default, clean all. As cross zone volume will cause data version confusion.
-        return volumes
+        self.logger.debug('Finding out volumes that will be deleted.')
+        return [v for v in volumes if self._can_be_cleaned(v, 'volume')]
+
+    def _can_be_cleaned(self, resource, type=None):
+        # How to deal with Expires tag
+        now = arrow.utcnow()
+        self.logger.debug("Checking if resource %s is can_be_cleaned." % resource.get('VolumeId') if type == 'volume'
+                          else resource.get('SnapshotId'))
+        for tag in resource['Tags']:
+            if tag['Key'] == 'Expires':
+                try:
+                    if tag['Value'].lower() == 'never':
+                        self.logger.debug(
+                            "Expire tag %s is 'never'.", tag['Value'])
+                        return False
+                    arrow.get(tag['Value'])
+                    expire_time = arrow.get(tag['Value'])
+                    self.logger.debug(
+                        "Expire tag %s is %s than NOW. It is can_be_cleaned!", tag['Value'], 
+                        'older' if expire_time < now else newer)
+                    return expire_time < now
+                except Exception as e:
+                    self.logger.debug(
+                        "Failed to parse Expire tag '%s'. Take it as not expirable. Exception '%s'",
+                        tag['Value'], e)
+        self.logger.debug(
+            'No expires tag, will take is expirable.')
+        return True
 
     def _tag_volume(self, volume, extra_tags=()):
         try:
