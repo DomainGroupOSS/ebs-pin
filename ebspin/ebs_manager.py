@@ -57,15 +57,23 @@ class EBSManager(object):
         self.logger.info("Searching for volume %s => %s", EBS_PIN_ID, self.id)
         volume = self._get_latest_volume_available()
         self.logger.debug("Found volume: %s", volume)
-        new_create = False
         if volume is None:
             volume = self._create_new_volume()
-            new_create = True
         volume = self._attach_volume(volume)
         if not volume:
             raise Exception("Failed to attach volume.")
-        if new_create:
-            self.logger.info("Initialize %s with format ext4",
+        sh.bash('-c', 'if [[ ! -d {dir} ]]; then sudo mkdir {dir}; fi'.format(
+                dir=self.directory
+                ))
+        try:
+            self.logger.info("Mounting %s to %s",
+                             self.os_device, self.directory)
+            sh.bash('-c', 'sudo mount {virtual_dvice} {dir}'.format(
+                virtual_dvice=self.os_device,
+                dir=self.directory
+            ))
+        except sh.ErrorReturnCode:
+            self.logger.info("Seems can't mount. Initialize %s with format ext4",
                              self.os_device)
             sh.bash('-c', '''(
 echo o # Create a new empty DOS partition table
@@ -78,15 +86,12 @@ echo w # Write changes
 ) | sudo fdisk {os_device}'''.format(os_device=self.os_device))
             sh.bash(
                 '-c', 'sudo mkfs.ext4 {os_device}'.format(os_device=self.os_device))
-        self.logger.info("mounting %s to %s",
-                         self.os_device, self.directory)
-        sh.bash('-c', 'if [[ ! -d {dir} ]]; then sudo mkdir {dir}; fi'.format(
-            dir=self.directory
-        ))
-        sh.bash('-c', 'sudo mount {virtual_dvice} {dir}'.format(
-            virtual_dvice=self.os_device,
-            dir=self.directory
-        ))
+            self.logger.info("Mounting %s to %s again.",
+                             self.os_device, self.directory)
+            sh.bash('-c', 'sudo mount {virtual_dvice} {dir}'.format(
+                virtual_dvice=self.os_device,
+                dir=self.directory
+            ))
         sh.bash('-c', 'sudo chmod 777 {dir}'.format(
             dir=self.directory
         ))
@@ -142,7 +147,6 @@ echo w # Write changes
             self.logger.info(
                 "If there are, clean up unused older volumes with %s => %s", EBS_PIN_ID, self.id)
             for v in self._find_should_deleted_volumes(volumes):
-                continue
                 self.logger.info("Deleting %s", v.get('VolumeId'))
                 try:
                     self.client.delete_volume(VolumeId=v['VolumeId'])
@@ -218,15 +222,16 @@ echo w # Write changes
         found_volume = None
         for volume in self.resource.Instance(self.instance_id).volumes.all():
             self.logger.debug("Checking volume %s", str(volume))
-            for tag in volume.tags:
-                if tag.get('Key') == EBS_PIN_ID and tag.get('Value') == self.id:
-                    found_volume = {
-                        'VolumeId': volume.volume_id,
-                        'CreateTime': volume.create_time,
-                        'Tags': volume.tags,
-                    }
-                    self._tag_volume(found_volume['VolumeId'])
-                    return found_volume
+            if volume.tags:
+                for tag in volume.tags:
+                    if tag.get('Key') == EBS_PIN_ID and tag.get('Value') == self.id:
+                        found_volume = {
+                            'VolumeId': volume.volume_id,
+                            'CreateTime': volume.create_time,
+                            'Tags': volume.tags,
+                        }
+                        self._tag_volume(found_volume['VolumeId'])
+                        return found_volume
         self.logger.info(
             'All the volume attached are not related to %s', self.id)
         return None
@@ -353,8 +358,8 @@ echo w # Write changes
                     arrow.get(tag['Value'])
                     expire_time = arrow.get(tag['Value'])
                     self.logger.debug(
-                        "Expire tag %s is %s than NOW. It is can_be_cleaned!", tag['Value'], 
-                        'older' if expire_time < now else newer)
+                        "Expire tag %s is %s than NOW. It is can_be_cleaned!", tag['Value'],
+                        'older' if expire_time < now else 'newer')
                     return expire_time < now
                 except Exception as e:
                     self.logger.debug(
