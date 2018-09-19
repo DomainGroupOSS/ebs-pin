@@ -43,10 +43,31 @@ class EBSManager(object):
         self.resource = boto3.Session().resource('ec2', self.region)
 
     @backoff.on_exception(backoff.expo,
+                          sh.ErrorReturnCode,
+                          max_time=60,)
+    def _try_mount(self):
+        """
+        We find that when a volume is newly created, attaching too fast can cause failure.
+        Thus we do a bit of retry.
+        """
+        sh.bash(
+            '-c',
+            'sudo mount {virtual_dvice} {dir}'.format(
+                virtual_dvice=self.os_device,
+                dir=self.directory))
+
+    @backoff.on_exception(backoff.expo,
                           botocore.exceptions.ClientError,
                           max_time=60,
                           on_backoff=backoff_hdlr)
     def attach_volume(self):
+        """
+        1  Find if thre is already volumes at the same zone, then use it.
+        2  Find if there is already volume at other zones, snapshot it and create a new one on this zone.
+        3  If no volume is available, find the newest snapshot and create a new volume.
+        4  If the volume is not initialized, foramt it with ext4
+        5  Mount it.
+        """
         self.logger.info("Checking existing mount status")
         volume = self._get_attached_volume()
         if volume is not None:
@@ -63,15 +84,11 @@ class EBSManager(object):
         if not volume:
             raise Exception("Failed to attach volume.")
         sh.bash('-c', 'if [[ ! -d {dir} ]]; then sudo mkdir {dir}; fi'.format(
-                dir=self.directory
-                ))
+                dir=self.directory))
         try:
             self.logger.info("Mounting %s to %s",
                              self.os_device, self.directory)
-            sh.bash('-c', 'sudo mount {virtual_dvice} {dir}'.format(
-                virtual_dvice=self.os_device,
-                dir=self.directory
-            ))
+            self._try_mount()
         except sh.ErrorReturnCode:
             self.logger.info("Seems can't mount. Initialize %s with format ext4",
                              self.os_device)
