@@ -102,7 +102,7 @@ echo   # Last sector (Accept default: varies)
 echo w # Write changes
 ) | sudo fdisk {os_device}'''.format(os_device=self.os_device))
             sh.bash(
-                '-c', 'sudo mkfs.ext4 {os_device}'.format(os_device=self.os_device))
+                '-c', 'yes | sudo mkfs.ext4 {os_device}'.format(os_device=self.os_device))
             self.logger.info("Mounting %s to %s again.",
                              self.os_device, self.directory)
             sh.bash('-c', 'sudo mount {virtual_dvice} {dir}'.format(
